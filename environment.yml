@@ -1,0 +1,15 @@
+# Quarto CLI 1.9.38 is installed separately and supplies Pandoc.
+name: scovary-visualization
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.4.0
+  - r-rmarkdown=2.31
+  - r-knitr=1.51
+  - r-ggplot2=4.0.3
+  - r-scales=1.4.0
+  - r-ragg=1.5.2
+  - bioconductor-complexheatmap=2.22.0
+  - r-circlize=0.4.18
+  - r-ggh4x=0.3.1

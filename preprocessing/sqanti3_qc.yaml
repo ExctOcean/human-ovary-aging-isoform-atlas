@@ -1,0 +1,45 @@
+# SQANTI3 6.0: final transcript catalog QC.
+main:
+  refGTF: reference/gencode.v50.annotation.gtf
+  refFasta: reference/GRCh38.primary_assembly.genome.fa
+  cpus: 100
+  dir: output/sqanti3
+  output: scOvary
+  log_level: INFO
+qc:
+  enabled: true
+  options:
+    isoforms: reference/scOvary.gtf
+    min_ref_len: 0
+    fasta: false
+    genename: false
+    novel_gene_prefix: ''
+    sites: ATAC,GCAG,GTAG
+    window: 20
+    aligner_choice: minimap2
+    gmap_index: ''
+    include_ORF: true
+    orf_input: ''
+    psauron_threshold: 0.5
+    short_reads: ''
+    SR_bam: ''
+    CAGE_peak: reference/refTSS_v4.1_human_coordinate.hg38.bed
+    polyA_motif_list: reference/mouse_and_human.polyA_motif.txt
+    polyA_peak: reference/atlas.clusters.3.0.GRCh38.GENCODE_42.bed
+    phyloP_bed: reference/hg38.phyloP100way.bed
+    expression: ''
+    coverage: ''
+    fl_count: ''
+    isoAnnotLite: false
+    gff3: ''
+    saturation: false
+    report: html
+    isoform_hits: false
+    ratio_TSS_metric: max
+    chunks: 1
+    is_fusion: false
+    tusco: ''
+filter:
+  enabled: false
+rescue:
+  enabled: false

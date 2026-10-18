@@ -1,0 +1,17 @@
+.quarto/
+*_files/
+*.knit.md
+output/
+work/
+.nextflow*
+*.log
+input/
+input_fastq/
+reference/
+preprocessing/sqanti3_filter_default.json
+.Rhistory
+.RData
+.Rproj.user/
+
+/.quarto/
+**/*.quarto_ipynb

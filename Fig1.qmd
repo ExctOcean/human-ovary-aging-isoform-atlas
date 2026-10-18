@@ -1,0 +1,148 @@
+---
+title: "Figure 1. Concordant age-associated RNA changes across ovarian cell types"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(ComplexHeatmap); library(circlize); library(grid)
+})
+
+DATA_DIR <- file.path("data", "Fig1")
+OUTPUT_DIR <- file.path("figures", "Fig1")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_C_DATA <- file.path(DATA_DIR, "Fig1C_cell_counts.tsv")
+INPUT_D_DATA <- file.path(DATA_DIR, "Fig1D_HVG_correlation.tsv")
+INPUT_E_DATA <- file.path(DATA_DIR, "Fig1E_gene_age_consistency.tsv")
+INPUT_D_TREES <- file.path(DATA_DIR, "Fig1D_trees.rds")
+
+CONFIG_C <- list(colors = c(Young = "#C96F9F", Aged = "#D48F5A"))
+
+CONFIG_D <- list(lower = 0.25)
+
+CONFIG_E <- list(palette = c("#3F78B5", "#6D97C5", "#9BB7D6", "#C9D7E6", 
+"#F7F7F7", "#EAD1D7", "#DEABB7", "#D28597", "#C66078"), breaks = c(-1, 
+-0.8, -0.6, -0.4, -0.2, 0.2, 0.4, 0.6, 0.8, 1), grid_colour = "#999999")
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+matrix_from_table <- function(data, value, row_id, column_id) {
+  rows <- unique(data[order(data$row_order), row_id])
+  columns <- unique(data[order(data$column_order), column_id])
+  result <- matrix(NA, length(rows), length(columns), dimnames = list(rows, columns))
+  result[cbind(data$row_order, data$column_order)] <- data[[value]]
+  result
+}
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## Cell-type counts
+
+Two-sided Fisher tests of pooled nucleus counts; two donors per age group. ****P < 0.0001.
+
+```{r}
+#| label: Fig1C_cell_counts
+panel <- CONFIG_C
+table <- read_input(INPUT_C_DATA, list(celltype = c("SC", "LEC", "BEC", "TC", "GC", "SMC", "EPI", 
+"IC"), clinical_group = c("Young", "Aged")))
+panel$data <- table[, c("celltype", "clinical_group", "n")]
+panel$stats <- unique(table[, c("celltype", "y_max", "p_val", "label")])
+
+p <- ggplot(panel$data, aes(celltype, n, fill = clinical_group)) +
+  geom_col(position = position_dodge(.72), width = .62) +
+  geom_text(aes(label = scales::comma(n)), position = position_dodge(.72),
+            vjust = -.5, size = 3, family = FONT_FAMILY) +
+  geom_text(data = panel$stats, aes(celltype, y_max + 1250, label = label),
+            inherit.aes = FALSE, size = 3.5, family = FONT_FAMILY) +
+  scale_fill_manual(values = panel$colors) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, .16))) +
+  labs(x = NULL, y = "Cell number")
+save_panel("Fig1C_cell_counts", p, 7.2, 4.4)
+```
+
+![](figures/Fig1/Fig1C_cell_counts.png){fig-alt="Cell-type counts" width=100%}
+
+[PDF](figures/Fig1/Fig1C_cell_counts.pdf) · [PNG](figures/Fig1/Fig1C_cell_counts.png)
+
+## Cross-platform HVG correlation
+
+Spearman correlations across 1,556 shared variable genes; * marks a low-cell donor profile.
+
+```{r}
+#| label: Fig1D_HVG_correlation
+panel <- CONFIG_D
+table <- read_input(INPUT_D_DATA, list())
+panel$rho <- matrix_from_table(table, "rho", "row_profile", "column_profile")
+panel$profiles <- unique(table[order(table$row_order), c("row_age", "row_celltype", "row_low_cell_count")])
+names(panel$profiles) <- c("age", "celltype", "low_cell_count")
+panel$trees <- readRDS(INPUT_D_TREES)
+
+split <- factor(panel$profiles$age, levels = c("Aged", "Young"))
+tree <- function(m) panel$trees[[which(vapply(panel$trees,
+  function(t) setequal(t$labels, rownames(m)), logical(1)))]]
+labels <- paste0(panel$profiles$celltype, ifelse(panel$profiles$low_cell_count, "*", ""))
+col <- colorRamp2(seq(panel$lower, 1, length.out = 9),
+  colorRampPalette(c("#F2F5F8", "#94B3D7", "#3F78B5"))(9))
+ht <- Heatmap(panel$rho, name = "Spearman\nrho", col = col,
+  row_split = split, column_split = split, cluster_rows = tree, cluster_columns = tree,
+  cluster_row_slices = FALSE, cluster_column_slices = FALSE,
+  row_dend_reorder = FALSE, column_dend_reorder = FALSE,
+  row_labels = labels, column_labels = labels, column_names_rot = 90,
+  row_names_gp = gpar(fontsize = 10), column_names_gp = gpar(fontsize = 10),
+  top_annotation = HeatmapAnnotation(Age = split,
+    col = list(Age = c(Aged = "#D48F5A", Young = "#C96F9F"))),
+  rect_gp = gpar(col = NA), use_raster = FALSE,
+  cell_fun = function(j, i, x, y, w, h, fill)
+    if (rownames(panel$rho)[i] == colnames(panel$rho)[j]) grid.rect(x, y, w, h, gp = gpar(fill = NA)))
+save_panel("Fig1D_HVG_correlation", function() draw(ht, merge_legends = TRUE,
+  padding = unit(c(2, 2, 2, 12), "mm")), 7.5, 6.5)
+```
+
+![](figures/Fig1/Fig1D_HVG_correlation.png){fig-alt="Cross-platform HVG correlation" width=100%}
+
+[PDF](figures/Fig1/Fig1D_HVG_correlation.pdf) · [PNG](figures/Fig1/Fig1D_HVG_correlation.png)
+
+## Gene age-effect consistency
+
+```{r}
+#| label: Fig1E_gene_age_consistency
+panel <- CONFIG_E
+table <- read_input(INPUT_E_DATA, list())
+panel$matrix <- matrix_from_table(table, "rho", "row_id", "column_id")
+panel$row_order <- rownames(panel$matrix)
+panel$column_order <- colnames(panel$matrix)
+
+ht <- ComplexHeatmap::pheatmap(panel$matrix[panel$row_order, panel$column_order],
+  color = panel$palette, breaks = panel$breaks, cluster_rows = FALSE, cluster_cols = FALSE,
+  border_color = panel$grid_colour, display_numbers = FALSE, fontsize = 11,
+  name = "Spearman\nrho")
+save_panel("Fig1E_gene_age_consistency", function() draw(ht,
+  padding = unit(c(2, 2, 2, 12), "mm")), 5.8, 5)
+```
+
+![](figures/Fig1/Fig1E_gene_age_consistency.png){fig-alt="Gene age-effect consistency" width=100%}
+
+[PDF](figures/Fig1/Fig1E_gene_age_consistency.pdf) · [PNG](figures/Fig1/Fig1E_gene_age_consistency.png)
+

@@ -1,0 +1,142 @@
+---
+title: "Figure 4. Coding and UTR context of alternative splicing and transcript ends"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  
+})
+
+DATA_DIR <- file.path("data", "Fig4")
+OUTPUT_DIR <- file.path("figures", "Fig4")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_A_DATA <- file.path(DATA_DIR, "Fig4A_AS_structural_composition.tsv")
+INPUT_B_DATA <- file.path(DATA_DIR, "Fig4B_context_conservation.tsv")
+INPUT_C_DATA <- file.path(DATA_DIR, "Fig4C_sequence_context.tsv")
+
+CONFIG_A <- list(colors = c(FSM = "#A6274B", ISM = "#F15A4A", NIC = "#E2A06B", 
+NNC = "#315AA6", Others = "#4D9F50"))
+
+CONFIG_B <- list(colors = c(CDS = "#3F78B5", `5UTR` = "#C58A35", `3UTR` = "#7F9A4B"
+), context_levels = c("CDS", "5UTR", "3UTR"), y_range = c(-2.20358336232991, 
+7.27204914541972), event_types = c("SE", "A5", "A3", "MX", "RI", 
+"AF", "AL"))
+
+CONFIG_C <- list(event_types = c("SE", "A5", "A3", "MX", "RI", "AF", "AL"
+), context_levels = c("CDS", "5UTR", "3UTR", "Mixed", "CDS/UTR unassigned"
+), colors = c(CDS = "#3F78B5", `5UTR` = "#C58A35", `3UTR` = "#7F9A4B", 
+Mixed = "#8A6FB0", `CDS/UTR unassigned` = "#D1D5D8"))
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## AS structural composition
+
+A transcript may contribute to multiple event classes.
+
+```{r}
+#| label: Fig4A_AS_structural_composition
+panel <- CONFIG_A
+table <- read_input(INPUT_A_DATA, list(event_type = c("SE", "A3", "A5", "RI", "MX", "AF", "AL"), 
+    category = c("FSM", "ISM", "NIC", "NNC", "Others")))
+panel$data <- table
+
+d <- panel$data
+d$category <- factor(d$category, levels = names(panel$colors))
+p <- ggplot(d, aes(event_type, prop, fill = category)) +
+  geom_col(width = .72, position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = panel$colors, drop = FALSE) +
+  scale_y_continuous(labels = scales::label_percent(), expand = c(0, 0)) +
+  labs(x = NULL, y = "Fraction within AS event")
+save_panel("Fig4A_AS_structural_composition", p, 7, 4.5)
+```
+
+![](figures/Fig4/Fig4A_AS_structural_composition.png){fig-alt="AS structural composition" width=100%}
+
+[PDF](figures/Fig4/Fig4A_AS_structural_composition.pdf) · [PNG](figures/Fig4/Fig4A_AS_structural_composition.png)
+
+## Whole-exon conservation
+
+Whole-exon phyloP distributions for coding and untranslated regions.
+
+```{r}
+#| label: Fig4B_context_conservation
+panel <- CONFIG_B
+table <- read_input(INPUT_B_DATA, list())
+panel$data <- table
+
+d <- panel$data
+d$sequence_context <- factor(d$sequence_context, levels = panel$context_levels)
+p <- ggplot(d, aes(x = x, fill = sequence_context)) +
+  geom_hline(yintercept = 0, colour = "#C4C9CD", linewidth = .2) +
+  geom_boxplot(aes(ymin = ymin, lower = lower, middle = middle, upper = upper,
+    ymax = ymax, group = interaction(event_type, sequence_context)), stat = "identity",
+    width = .2, linewidth = .3, outlier.shape = NA) +
+  scale_fill_manual(values = panel$colors, labels = c("CDS", "5' UTR", "3' UTR")) +
+  scale_x_continuous(breaks = seq_along(panel$event_types), labels = panel$event_types) +
+  scale_y_continuous(limits = panel$y_range) +
+  labs(x = NULL, y = "Mean phyloP")
+save_panel("Fig4B_context_conservation", p, 7, 4.5)
+```
+
+![](figures/Fig4/Fig4B_context_conservation.png){fig-alt="Whole-exon conservation" width=100%}
+
+[PDF](figures/Fig4/Fig4B_context_conservation.pdf) · [PNG](figures/Fig4/Fig4B_context_conservation.png)
+
+## Event-variable sequence context
+
+Mixed and unassigned regions are included in each event-class denominator.
+
+```{r}
+#| label: Fig4C_sequence_context
+panel <- CONFIG_C
+table <- read_input(INPUT_C_DATA, list())
+panel$data <- table
+panel$counts <- unique(table[, c("event_type", "total_branches")])
+names(panel$counts)[2] <- "n_branches"
+
+d <- panel$data
+d$event_type <- factor(d$event_type, levels = panel$event_types)
+d$sequence_context <- factor(d$sequence_context, levels = panel$context_levels)
+n <- panel$counts$n_branches[match(panel$event_types, panel$counts$event_type)]
+p <- ggplot(d, aes(event_type, fraction, fill = sequence_context)) +
+  geom_col(width = .72) +
+  scale_fill_manual(values = panel$colors, drop = FALSE,
+                    labels = c("CDS", "5' UTR", "3' UTR", "Mixed", "CDS/UTR unassigned")) +
+  scale_x_discrete(labels = paste0(panel$event_types, "\n", scales::comma(n)), drop = FALSE) +
+  scale_y_continuous(labels = scales::label_percent(), limits = c(0, 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Branches with variable sequence") +
+  guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+save_panel("Fig4C_sequence_context", p, 7, 4.5)
+```
+
+![](figures/Fig4/Fig4C_sequence_context.png){fig-alt="Event-variable sequence context" width=100%}
+
+[PDF](figures/Fig4/Fig4C_sequence_context.pdf) · [PNG](figures/Fig4/Fig4C_sequence_context.png)
+

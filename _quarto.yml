@@ -1,0 +1,23 @@
+project:
+  type: default
+  render:
+    - Fig1.qmd
+    - Fig2.qmd
+    - Fig3.qmd
+    - Fig4.qmd
+    - Fig5.qmd
+    - Fig6.qmd
+    - Fig7.qmd
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+execute:
+  echo: true
+  message: false
+  warning: true
+  cache: false

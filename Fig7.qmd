@@ -1,0 +1,180 @@
+---
+title: "Figure 7. UTR features of shared age-associated isoforms"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(grid)
+})
+
+DATA_DIR <- file.path("data", "Fig7")
+OUTPUT_DIR <- file.path("figures", "Fig7")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_A_CELLS <- file.path(DATA_DIR, "Fig7A_effective_UTR3_cells.tsv")
+INPUT_A_POLYGONS <- file.path(DATA_DIR, "Fig7A_effective_UTR3_polygons.tsv")
+INPUT_A_STATISTICS <- file.path(DATA_DIR, "Fig7A_effective_UTR3_statistics.tsv")
+INPUT_B_DATA <- file.path(DATA_DIR, "Fig7B_UTR3_length.tsv")
+INPUT_B_STATISTICS <- file.path(DATA_DIR, "Fig7B_UTR3_length_statistics.tsv")
+INPUT_E_DATA <- file.path(DATA_DIR, "Fig7E_SEMA4C_site_usage.tsv")
+
+CONFIG_A <- list(ct_order = c("SC", "LEC", "BEC", "TC", "SMC", "EPI", "IC"
+))
+
+CONFIG_B <- list(colors = c(`Type-specific` = "#A278AA", Shared = "#476F9B"
+))
+
+CONFIG_E <- list(colors = c(Young = "#C96F9F", Aged = "#D48F5A"), limits = c(0, 
+0.6156), shapes = c(OV_D001 = 21, OV_D002 = 24, OV_D004 = 22, 
+OV_D005 = 23))
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## Effective 3-prime UTR length
+
+Two-sided nucleus-level Wilcoxon tests; two donors per age group. White dots show medians and thick lines show interquartile ranges.
+
+```{r}
+#| label: Fig7A_effective_UTR3
+panel <- CONFIG_A
+cells <- read_input(INPUT_A_CELLS, list())
+polygons <- read_input(INPUT_A_POLYGONS, list())
+statistics <- read_input(INPUT_A_STATISTICS, list())
+cells$celltype <- factor(cells$celltype, panel$ct_order)
+statistics$celltype <- factor(statistics$celltype, panel$ct_order)
+# Mirror the half outlines.
+groups <- split(polygons, interaction(polygons$celltype, polygons$age, drop = TRUE))
+outline <- do.call(rbind, lapply(groups, function(data) {
+  center <- if (data$age[1] == "Young") 1 else 2
+  width <- abs(data$x - match(data$celltype[1], panel$ct_order)) / .43 * .36
+  data.frame(celltype = data$celltype[1], age = data$age[1],
+             x = c(center - width, rev(center + width)), value = c(data$value, rev(data$value)))
+}))
+outline$celltype <- factor(outline$celltype, panel$ct_order)
+outline$age <- factor(outline$age, c("Young", "Aged"))
+groups <- split(cells, interaction(cells$celltype, cells$age, drop = TRUE))
+summary <- do.call(rbind, lapply(groups, function(data) {
+  quartiles <- quantile(data$value, c(.25, .5, .75), names = FALSE)
+  iqr <- quartiles[3] - quartiles[1]
+  data.frame(celltype = data$celltype[1], age = data$age[1], x = if (data$age[1] == "Young") 1 else 2,
+             median = quartiles[2], q1 = quartiles[1], q3 = quartiles[3],
+             lower = min(data$value[data$value >= quartiles[1] - 1.5 * iqr]),
+             upper = max(data$value[data$value <= quartiles[3] + 1.5 * iqr]))
+}))
+span <- diff(range(cells$value)); maximum <- max(cells$value)
+statistics$bracket <- maximum + .035 * span
+statistics$label_y <- maximum + .115 * span
+statistics$label <- paste0("P=", ifelse(statistics$p_value < .001,
+  formatC(statistics$p_value, format = "e", digits = 1), formatC(statistics$p_value, format = "f", digits = 3)))
+age_colors <- c(Young = "#C96F9F", Aged = "#D48F5A")
+cell_colors <- c(SC = "#3C9277", LEC = "#419D9A", BEC = "#3F78B5", TC = "#C58A35",
+                 SMC = "#7F9A4B", EPI = "#8A6FB0", IC = "#B79B3F")
+fig7A_plot <- ggplot(outline, aes(x, value, group = interaction(celltype, age), fill = age)) +
+  geom_polygon(alpha = .83, linewidth = .18, colour = "#657075") +
+  geom_segment(data = summary, aes(x = x, xend = x, y = lower, yend = upper), inherit.aes = FALSE, linewidth = .22, colour = "#EDF0F0") +
+  geom_segment(data = summary, aes(x = x, xend = x, y = q1, yend = q3), inherit.aes = FALSE, linewidth = .8, colour = "#EDF0F0") +
+  geom_point(data = summary, aes(x = x, y = median), inherit.aes = FALSE, size = 1.6, shape = 21, fill = "white", colour = "white") +
+  geom_segment(data = statistics, aes(x = 1, xend = 2, y = bracket, yend = bracket), inherit.aes = FALSE, linewidth = .22) +
+  geom_text(data = statistics, aes(x = 1.5, y = label_y, label = label), inherit.aes = FALSE, family = FONT_FAMILY, size = 2.7) +
+  ggh4x::facet_grid2(cols = vars(celltype), strip = ggh4x::strip_themed(
+    background_x = ggh4x::elem_list_rect(fill = unname(cell_colors[panel$ct_order]), colour = NA),
+    text_x = element_text(colour = "white", face = "bold"))) +
+  scale_fill_manual(values = age_colors) +
+  scale_x_continuous(breaks = NULL, limits = c(.5, 2.5), expand = expansion(mult = 0)) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(.035, .10))) +
+  labs(x = NULL, y = "Effective 3' UTR length per nucleus (nt)") +
+  theme(legend.position = "bottom", panel.spacing.x = unit(.8, "mm"), strip.text = element_text(size = 9))
+save_panel("Fig7A_effective_UTR3", fig7A_plot, 9, 4.8)
+```
+
+![](figures/Fig7/Fig7A_effective_UTR3.png){fig-alt="Effective 3-prime UTR length" width=100%}
+
+[PDF](figures/Fig7/Fig7A_effective_UTR3.pdf) · [PNG](figures/Fig7/Fig7A_effective_UTR3.png)
+
+## Selected-transcript 3-prime UTR length
+
+Transcript lengths exclude 512 unavailable values. Boxes show medians and interquartile ranges; whiskers extend to 1.5 times the interquartile range.
+
+```{r}
+#| label: Fig7B_UTR3_length
+panel <- CONFIG_B
+table <- read_input(INPUT_B_DATA, list())
+panel$data <- table
+panel$stats <- read_input(INPUT_B_STATISTICS, list())
+
+d <- panel$data[is.finite(panel$data$value), ]
+d$group <- factor(d$group, levels = c("Specific", "Shared"), labels = c("Type-specific", "Shared"))
+s <- panel$stats
+p <- ggplot(d, aes(group, value, fill = group)) +
+  geom_violin(width = .82, alpha = .27, linewidth = .4, trim = TRUE) +
+  geom_boxplot(width = .24, outlier.shape = NA, linewidth = .5, alpha = .72) +
+  geom_point(position = position_jitter(width = .12, seed = 731), size = .8, alpha = .35) +
+  scale_fill_manual(values = panel$colors) +
+  scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+                    breaks = c(0, 1, 10, 100, 1000, 10000), labels = scales::comma) +
+  labs(x = NULL, y = "3' UTR length (nt; pseudo-log scale)") +
+  theme(legend.position = "none")
+save_panel("Fig7B_UTR3_length", p, 4.8, 5)
+```
+
+Two-sided Mann–Whitney P = `r formatC(s$p_value, format = "f", digits = 4)`; BH q = `r formatC(s$q_reference, format = "f", digits = 3)` (196 comparisons).
+
+![](figures/Fig7/Fig7B_UTR3_length.png){fig-alt="Selected-transcript 3-prime UTR length" width=100%}
+
+[PDF](figures/Fig7/Fig7B_UTR3_length.pdf) · [PNG](figures/Fig7/Fig7B_UTR3_length.png)
+
+## SEMA4C predicted-site carriage
+
+Donor fractions and mean ± SEM; two donors per age group. Fractions use all quantified SEMA4C transcript UMI as the denominator.
+
+```{r}
+#| label: Fig7E_SEMA4C_site_usage
+panel <- CONFIG_E
+table <- read_input(INPUT_E_DATA, list())
+panel$data <- table[, c("donor_id", "clinical_group", "fraction")]
+panel$summary <- unique(table[, c("clinical_group", "mean", "SEM", "n", "lower", "upper")])
+
+d <- panel$data; s <- panel$summary
+d$clinical_group <- factor(d$clinical_group, levels = names(panel$colors))
+s$clinical_group <- factor(s$clinical_group, levels = names(panel$colors))
+p <- ggplot(d, aes(clinical_group, fraction, colour = clinical_group)) +
+  geom_errorbar(data = s, aes(y = mean, ymin = lower, ymax = upper), width = .12) +
+  geom_point(data = s, aes(y = mean), shape = 95, size = 8) +
+  geom_point(aes(shape = donor_id), position = position_jitter(width = .05, seed = 731), size = 3) +
+  scale_colour_manual(values = panel$colors) + scale_shape_manual(values = panel$shapes) +
+  scale_y_continuous(labels = scales::label_percent(), limits = panel$limits) +
+  labs(x = NULL, y = "Site-carrying / parent-gene transcript UMI") +
+  guides(colour = "none") + theme(legend.position = "bottom")
+save_panel("Fig7E_SEMA4C_site_usage", p, 5.7, 5)
+```
+
+![](figures/Fig7/Fig7E_SEMA4C_site_usage.png){fig-alt="SEMA4C predicted-site carriage" width=100%}
+
+[PDF](figures/Fig7/Fig7E_SEMA4C_site_usage.pdf) · [PNG](figures/Fig7/Fig7E_SEMA4C_site_usage.png)
+

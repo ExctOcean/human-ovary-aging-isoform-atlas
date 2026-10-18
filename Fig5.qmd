@@ -1,0 +1,196 @@
+---
+title: "Figure 5. TE-associated host transcripts predominantly involve transcript ends"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(grid)
+})
+
+DATA_DIR <- file.path("data", "Fig5")
+OUTPUT_DIR <- file.path("figures", "Fig5")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_B_FLOWS <- file.path(DATA_DIR, "Fig5B_TE_event_flow_flows.tsv")
+INPUT_B_NODES <- file.path(DATA_DIR, "Fig5B_TE_event_flow_nodes.tsv")
+INPUT_C_DATA <- file.path(DATA_DIR, "Fig5C_TE_composition.tsv")
+INPUT_E_DATA <- file.path(DATA_DIR, "Fig5E_SCAND1_expression.tsv")
+
+CONFIG_B <- list(sq_order = c("FSM", "ISM", "NIC", "NNC", "Other"), sq_colors = c(FSM = "#A6274B", 
+ISM = "#F15A4A", NIC = "#E2A06B", NNC = "#315AA6", Other = "#4D9F50"
+), te_order = c("TES-derived", "TSS-derived", "monoexon_TE", 
+"Exonization", "Mixed"), event_order = c("SE", "A5", "A3", "MX", 
+"RI", "AF", "AL", "No catalog event"), event_colors = c(SE = "#3F78B5", 
+A5 = "#C66078", A3 = "#C58A35", MX = "#7457A5", RI = "#3C9277", 
+AF = "#B65445", AL = "#58868B", `No catalog event` = "#B8BDC2"
+), te_labels = c(`TES-derived` = "TES", `TSS-derived` = "TSS", 
+monoexon_TE = "monoexon_TE", Exonization = "Exonization", Mixed = "Mixed"
+), total_isoforms = 22336L, ribbon_alpha = 0.56, node_width_mm = 1.3, 
+    height_mm = 154, weighted_height_mm = 86, plot_top_mm = 130, 
+    width_mm = 230, first_x0 = 29.65, first_x1 = 104.35, middle_x = 105, 
+    second_x0 = 105.65, second_x1 = 190.35, right_x = 191, middle_flat_mm = 20, 
+    middle_label_y_offset_mm = 2.4)
+
+CONFIG_C <- list()
+
+CONFIG_E <- list(celltypes = c("SC", "BEC", "LEC", "TC", "SMC", "IC"), colors = c(Young = "#C96F9F", 
+Aged = "#D48F5A"))
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## TE-associated structural flows
+
+22,336 TE-associated isoforms; each isoform contributes 1/k to each of its k event classes.
+
+```{r}
+#| label: Fig5B_TE_event_flow
+panel <- CONFIG_B
+panel$height_mm <- panel$plot_top_mm + 12
+flows <- read_input(INPUT_B_FLOWS, list())
+nodes <- read_input(INPUT_B_NODES, list())
+# Interpolate between flow endpoints.
+draw_flow <- function() {
+  grid.newpage()
+  pushViewport(viewport(xscale = c(0, panel$width_mm), yscale = c(0, panel$height_mm)))
+  text_at <- function(label, x, y, size = 7.5, face = "plain", just = "centre")
+    grid.text(label, unit(x, "native"), unit(y, "native"), just = just,
+              gp = gpar(fontfamily = FONT_FAMILY, fontsize = size, fontface = face))
+  bar_at <- function(x, y, width, height, color)
+    grid.rect(unit(x, "native"), unit(y, "native"), unit(width, "native"), unit(height, "native"), gp = gpar(fill = color, col = NA))
+  for (i in which(flows$weight > 0)) {
+    edge <- flows[i, ]; first <- edge$stage == 1
+    x0 <- if (first) panel$first_x0 else panel$second_x0
+    x1 <- if (first) panel$first_x1 else panel$second_x1
+    x <- seq(x0, x1, length.out = 140)
+    t <- pmax(0, pmin(1, (x - x0 - ifelse(first, 0, panel$middle_flat_mm)) /
+                       (x1 - x0 - panel$middle_flat_mm)))
+    ease <- 3 * t^2 - 2 * t^3
+    upper <- edge$lh + (edge$rh - edge$lh) * ease
+    lower <- edge$ll + (edge$rl - edge$ll) * ease
+    color <- if (first) panel$sq_colors[[edge$source]] else panel$event_colors[[edge$target]]
+    grid.polygon(unit(c(x, rev(x)), "native"), unit(c(upper, rev(lower)), "native"),
+                 gp = gpar(fill = adjustcolor(color, alpha.f = panel$ribbon_alpha), col = NA))
+  }
+  for (i in seq_len(nrow(nodes))) {
+    node <- nodes[i, ]; y <- (node$hi + node$lo) / 2
+    x <- c(29, panel$middle_x, panel$right_x)[node$stage]
+    color <- if (node$stage == 1) panel$sq_colors[[node$id]] else if (node$stage == 3) panel$event_colors[[node$id]] else "#5C5C5C"
+    bar_at(x, y, panel$node_width_mm, node$hi - node$lo, color)
+    if (node$stage == 1) {
+      text_at(node$id, 2, y, 7.8, "bold", "left")
+      text_at(format(node$N, big.mark = ",", trim = TRUE), 26, y, 7.3, just = "right")
+    } else if (node$stage == 2) {
+      text_at(paste(panel$te_labels[[node$id]], format(node$N, big.mark = ",", trim = TRUE)),
+              x, node$hi + panel$middle_label_y_offset_mm, 7.5, "bold")
+    } else {
+      text_at(node$id, x + 3, y + 1.5, 7.5, "bold", "left")
+      text_at(formatC(node$N, format = "f", digits = 1, big.mark = ","), x + 3, y - 1.8, 7.2, just = "left")
+    }
+  }
+  text_at("SQANTI3 classification", 2, panel$plot_top_mm + 7, 8.5, "bold", "left")
+  text_at("TE-associated isoform", panel$middle_x, panel$plot_top_mm + 7, 8.5, "bold")
+  text_at("Alternative event class", 228, panel$plot_top_mm + 7, 8.5, "bold", "right")
+
+
+  legend_x <- c(31, 53, 75, 97, 119, 141, 163, 185)
+
+  for (j in seq_along(panel$event_order)) {
+    bar_at(legend_x[j], 3.8, 2.2, 2.2, panel$event_colors[[panel$event_order[j]]])
+    text_at(panel$event_order[j], legend_x[j] + 2.2, 3.8, 6.8, just = "left")
+  }
+  popViewport()
+}
+save_panel("Fig5B_TE_event_flow", draw_flow, panel$width_mm / 25.4, panel$height_mm / 25.4)
+```
+
+![](figures/Fig5/Fig5B_TE_event_flow.png){fig-alt="TE-associated structural flows" width=100%}
+
+[PDF](figures/Fig5/Fig5B_TE_event_flow.pdf) · [PNG](figures/Fig5/Fig5B_TE_event_flow.png)
+
+## TSS/TES TE composition
+
+```{r}
+#| label: Fig5C_TE_composition
+composition <- read_input(INPUT_C_DATA, list(segment = c("LINE: L2a", "LINE: L2c", "LINE: L2b", "LINE: Other subfamilies", 
+"SINE: AluSz", "SINE: AluJb", "SINE: AluSx1", "SINE: Other subfamilies", 
+"LTR: LTR12E", "LTR: THE1C", "LTR: MER61A", "LTR: Other subfamilies", 
+"DNA: Tigger1", "DNA: MER5A", "DNA: MER5B", "DNA: Other subfamilies", 
+"Retroposon: Retroposon", "LINE: L1M5", "SINE: AluY", "LTR: MLT1D", 
+"LTR: MLT1J", "LTR: MLT1B", "DNA: MER2", "DNA: MER33", "DNA: Tigger3b"
+)))
+# TSS and TES are two selected components of the same manuscript panel C.
+for (kind in c("TSS-derived", "TES-derived")) {
+  data <- composition[composition$structural_event == kind, ]
+  data <- data[order(data$segment_order), ]
+  data$segment <- factor(data$segment, levels = as.character(data$segment))
+  colors <- setNames(data$colour, data$segment)
+  labels <- setNames(data$legend_label, data$segment)
+  plot <- ggplot(data, aes(x = 2, y = N, fill = segment)) +
+    geom_col(width = 1, colour = "#242424", linewidth = .2, position = position_stack(reverse = TRUE)) +
+    annotate("text", x = .5, y = 0, label = paste0("Isoforms\n", scales::comma(sum(data$N))), size = 4, family = FONT_FAMILY) +
+    coord_polar(theta = "y") + xlim(.5, 2.5) +
+    scale_fill_manual(values = colors, labels = labels, drop = FALSE)  +
+    theme_void(base_size = 11, base_family = FONT_FAMILY) +
+    theme(legend.position = "right", legend.title = element_blank(), legend.text = element_text(size = 9),
+          plot.margin = margin(10, 10, 10, 10))
+  save_panel(paste0("Fig5C_", sub("-derived", "", kind), "_TE_composition"), plot, 7.4, 5)
+}
+```
+
+![](figures/Fig5/Fig5C_TSS_TE_composition.png){fig-alt="TSS/TES TE composition" width=100%}
+
+[PDF](figures/Fig5/Fig5C_TSS_TE_composition.pdf) · [PNG](figures/Fig5/Fig5C_TSS_TE_composition.png)
+
+![](figures/Fig5/Fig5C_TES_TE_composition.png){fig-alt="TSS/TES TE composition" width=100%}
+
+[PDF](figures/Fig5/Fig5C_TES_TE_composition.pdf) · [PNG](figures/Fig5/Fig5C_TES_TE_composition.png)
+
+## SCAND1 gene expression
+
+```{r}
+#| label: Fig5E_SCAND1_expression
+panel <- CONFIG_E
+table <- read_input(INPUT_E_DATA, list())
+panel$data <- table
+
+d <- panel$data
+d$celltype <- factor(d$celltype, levels = panel$celltypes)
+d$age <- factor(d$age, levels = names(panel$colors))
+p <- ggplot(d, aes(celltype, gene_log_normalized, fill = age)) +
+  geom_violin(scale = "width", trim = TRUE, adjust = 1,
+              position = position_dodge(.8), linewidth = .3) +
+  scale_fill_manual(values = panel$colors) +
+  labs(x = NULL, y = "Log-normalized gene expression")
+save_panel("Fig5E_SCAND1_expression", p, 7.2, 4.5)
+```
+
+![](figures/Fig5/Fig5E_SCAND1_expression.png){fig-alt="SCAND1 gene expression" width=100%}
+
+[PDF](figures/Fig5/Fig5E_SCAND1_expression.pdf) · [PNG](figures/Fig5/Fig5E_SCAND1_expression.png)
+

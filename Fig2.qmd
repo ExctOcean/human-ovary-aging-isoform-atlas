@@ -1,0 +1,123 @@
+---
+title: "Figure 2. Structural annotation and supporting evidence for the ovarian transcript catalog"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  
+})
+
+DATA_DIR <- file.path("data", "Fig2")
+OUTPUT_DIR <- file.path("figures", "Fig2")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_C_DATA <- file.path(DATA_DIR, "Fig2C_structural_categories.tsv")
+INPUT_D_DATA <- file.path(DATA_DIR, "Fig2D_coding_composition.tsv")
+INPUT_H_DATA <- file.path(DATA_DIR, "Fig2H_isoforms_per_gene.tsv")
+
+CONFIG_C <- list(colors = c(FSM = "#A6274B", ISM = "#F15A4A", NIC = "#E2A06B", 
+NNC = "#315AA6", Others = "#4D9F50"))
+
+CONFIG_D <- list(colors = c(Coding = "#3F9B8F", NMD = "#C49A3A", Non_coding = "#8A6FB0"
+), class_order = c("FSM", "ISM", "NIC", "NNC", "Others"))
+
+CONFIG_H <- list()
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## Transcript structural classes
+
+Percentages use the 107,155-transcript catalog.
+
+```{r}
+#| label: Fig2C_structural_categories
+panel <- CONFIG_C
+table <- read_input(INPUT_C_DATA, list(class_code = c("FSM", "ISM", "NIC", "NNC", "Others")))
+panel$data <- table
+
+p <- ggplot(panel$data, aes(class_code, count, fill = class_code)) +
+  geom_col(width = .7, colour = "black", linewidth = .3) +
+  geom_text(aes(label = sprintf("%.1f%%", perc)), vjust = -.5,
+            size = 3.5, family = FONT_FAMILY) +
+  scale_fill_manual(values = panel$colors) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, .12))) +
+  labs(x = NULL, y = "Isoforms (count)") +
+  theme(legend.position = "none")
+save_panel("Fig2C_structural_categories", p, 4.6, 4.2)
+```
+
+![](figures/Fig2/Fig2C_structural_categories.png){fig-alt="Transcript structural classes" width=100%}
+
+[PDF](figures/Fig2/Fig2C_structural_categories.pdf) · [PNG](figures/Fig2/Fig2C_structural_categories.png)
+
+## Coding composition by structural class
+
+NMD denotes predicted nonsense-mediated decay.
+
+```{r}
+#| label: Fig2D_coding_composition
+panel <- CONFIG_D
+table <- read_input(INPUT_D_DATA, list())
+panel$data <- table
+
+d <- panel$data
+d$class_code <- factor(d$class_code, levels = panel$class_order)
+d$codingType <- factor(d$codingType, levels = names(panel$colors))
+p <- ggplot(d, aes(class_code, perc / 100, fill = codingType)) +
+  geom_col(width = .72) + scale_fill_manual(values = panel$colors) +
+  scale_y_continuous(labels = scales::label_percent(), expand = c(0, 0)) +
+  labs(x = NULL, y = "Fraction within structural category")
+save_panel("Fig2D_coding_composition", p, 6, 4.4)
+```
+
+![](figures/Fig2/Fig2D_coding_composition.png){fig-alt="Coding composition by structural class" width=100%}
+
+[PDF](figures/Fig2/Fig2D_coding_composition.pdf) · [PNG](figures/Fig2/Fig2D_coding_composition.png)
+
+## Isoforms per gene
+
+```{r}
+#| label: Fig2H_isoforms_per_gene
+panel <- CONFIG_H
+table <- read_input(INPUT_H_DATA, list(count_cat = c("1", "2", "3", "4", "5+")))
+panel$data <- table
+
+p <- ggplot(panel$data, aes(count_cat, gene_count, fill = count_cat)) +
+  geom_col(width = .7, colour = "black", linewidth = .3) +
+  geom_text(aes(label = sprintf("%.1f%%", perc)), vjust = -.5, size = 3.5) +
+  scale_fill_brewer(palette = "Blues") +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, .12))) +
+  labs(x = "Number of associated isoforms", y = "Gene count") + theme(legend.position = "none")
+save_panel("Fig2H_isoforms_per_gene", p, 5, 4.3)
+```
+
+![](figures/Fig2/Fig2H_isoforms_per_gene.png){fig-alt="Isoforms per gene" width=100%}
+
+[PDF](figures/Fig2/Fig2H_isoforms_per_gene.pdf) · [PNG](figures/Fig2/Fig2H_isoforms_per_gene.png)
+

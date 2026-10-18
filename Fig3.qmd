@@ -1,0 +1,130 @@
+---
+title: "Figure 3. Ovarian cell types preferentially use distinct isoforms"
+engine: knitr
+---
+
+## Setup
+
+```{r}
+#| label: setup
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                     cache = FALSE, fig.align = "left", out.width = "100%")
+suppressPackageStartupMessages({
+  library(ggplot2)
+  
+})
+
+DATA_DIR <- file.path("data", "Fig3")
+OUTPUT_DIR <- file.path("figures", "Fig3")
+FONT_FAMILY <- "Arial"
+dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+INPUT_B_DATA <- file.path(DATA_DIR, "Fig3B_rarefaction.tsv")
+INPUT_C_DATA <- file.path(DATA_DIR, "Fig3C_isoform_diversity_rank.tsv")
+INPUT_E_DATA <- file.path(DATA_DIR, "Fig3E_EGFL7_usage.tsv")
+
+CONFIG_B <- list(colors = c(SC = "#3C9277", LEC = "#419D9A", BEC = "#3F78B5", 
+TC = "#C58A35", GC = "#C66078", SMC = "#7F9A4B", EPI = "#8A6FB0", 
+IC = "#B79B3F"))
+
+CONFIG_C <- list(colors = c(SC = "#3C9277", LEC = "#419D9A", BEC = "#3F78B5", 
+TC = "#C58A35", GC = "#C66078", SMC = "#7F9A4B", EPI = "#8A6FB0", 
+IC = "#B79B3F"))
+
+CONFIG_E <- list(celltype_order = c("SC", "LEC", "BEC", "TC", "GC", "SMC", 
+"EPI", "IC"), colors = c(`EGFL7-215` = "#8D689E", `EGFL7-270` = "#B17DA2", 
+`EGFL7-202` = "#C2A4BA", `EGFL7-304` = "#DECBD9", Other = "#EEE8ED"
+))
+
+read_input <- function(file, levels = list()) {
+  data <- read.delim(file, stringsAsFactors = FALSE, check.names = FALSE, na.strings = "NA")
+  for (column in names(levels)) data[[column]] <- factor(data[[column]], levels[[column]])
+  data
+}
+
+theme_set(theme_classic(base_size = 11, base_family = FONT_FAMILY) +
+  theme(legend.title = element_blank(), legend.position = "top",
+        plot.margin = margin(8, 10, 8, 8)))
+save_panel <- function(name, plot, width, height) {
+  draw <- function() if (is.function(plot)) plot() else print(plot)
+  grDevices::cairo_pdf(file.path(OUTPUT_DIR, paste0(name, ".pdf")),
+                      width = width, height = height, family = FONT_FAMILY)
+  draw(); grDevices::dev.off()
+  ragg::agg_png(file.path(OUTPUT_DIR, paste0(name, ".png")),
+                width = width, height = height, units = "in", res = 600, background = "white")
+  draw(); grDevices::dev.off()
+  invisible(NULL)
+}
+```
+
+## Isoform rarefaction
+
+Means and 95% confidence intervals from five subsampling iterations.
+
+```{r}
+#| label: Fig3B_rarefaction
+panel <- CONFIG_B
+table <- read_input(INPUT_B_DATA, list(Celltype = c("SC", "LEC", "BEC", "TC", "GC", "SMC", "EPI", 
+"IC")))
+panel$data <- table
+
+p <- ggplot(panel$data, aes(Sample_Size, Mean_Isoforms, colour = Celltype, fill = Celltype)) +
+  geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = .18, colour = NA) +
+  geom_line(linewidth = .7) + geom_point(size = 1.2) +
+  scale_colour_manual(values = panel$colors) + scale_fill_manual(values = panel$colors) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = "Number of sampled cells", y = "Unique isoforms detected")
+save_panel("Fig3B_rarefaction", p, 6.5, 4.5)
+```
+
+![](figures/Fig3/Fig3B_rarefaction.png){fig-alt="Isoform rarefaction" width=100%}
+
+[PDF](figures/Fig3/Fig3B_rarefaction.pdf) · [PNG](figures/Fig3/Fig3B_rarefaction.png)
+
+## Isoform diversity rank
+
+```{r}
+#| label: Fig3C_isoform_diversity_rank
+panel <- CONFIG_C
+table <- read_input(INPUT_C_DATA, list(Celltype = c("SC", "LEC", "BEC", "TC", "GC", "SMC", "EPI", 
+"IC")))
+panel$data <- table
+
+p <- ggplot(panel$data, aes(Gene_Rank, Isoform_Count, colour = Celltype)) +
+  geom_line(linewidth = .7, alpha = .8) +
+  scale_y_continuous(trans = "log1p", breaks = c(1, 2, 5, 10, 20, 50)) +
+  scale_x_log10(labels = scales::comma) + scale_colour_manual(values = panel$colors) +
+  labs(x = "Gene rank (log10 scale)", y = "Isoforms per gene (log1p scale)")
+save_panel("Fig3C_isoform_diversity_rank", p, 6.5, 4.5)
+```
+
+![](figures/Fig3/Fig3C_isoform_diversity_rank.png){fig-alt="Isoform diversity rank" width=100%}
+
+[PDF](figures/Fig3/Fig3C_isoform_diversity_rank.pdf) · [PNG](figures/Fig3/Fig3C_isoform_diversity_rank.png)
+
+## EGFL7 isoform usage
+
+Mean within-gene isoform fractions across four donors.
+
+```{r}
+#| label: Fig3E_EGFL7_usage
+panel <- CONFIG_E
+table <- read_input(INPUT_E_DATA, list())
+panel$data <- table
+
+d <- panel$data
+d$celltype <- factor(d$celltype, levels = panel$celltype_order)
+d$isoform <- factor(d$isoform, levels = names(panel$colors))
+p <- ggplot(d, aes(celltype, IF, fill = isoform)) +
+  geom_col(width = .86, colour = "white", linewidth = .12,
+           position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = panel$colors, drop = FALSE) +
+  scale_y_continuous(limits = c(0, 1), labels = scales::label_percent(), expand = c(0, 0)) +
+  labs(x = NULL, y = "Mean within-gene isoform fraction") +
+  guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+save_panel("Fig3E_EGFL7_usage", p, 6.5, 4.5)
+```
+
+![](figures/Fig3/Fig3E_EGFL7_usage.png){fig-alt="EGFL7 isoform usage" width=100%}
+
+[PDF](figures/Fig3/Fig3E_EGFL7_usage.pdf) · [PNG](figures/Fig3/Fig3E_EGFL7_usage.png)
+
